@@ -1,0 +1,44 @@
+package Mayuresh_sba_p;
+import java.util.*;
+import java.io.*;
+import org.apache.kafka.clients.producer.*;
+import org.apache.kafka.common.serialization.StringSerializer;
+
+public class read_file_sba {
+
+	public static void main(String[] args)throws Exception {
+		// TODO Auto-generated method stub
+        String topicName = "ratings";
+        Properties kafkaProps =new Properties();
+        kafkaProps.put("bootstrap.servers","localhost:9092");
+        kafkaProps.put("key.serializer","org.apache.kafka.common.serialization.StringSerializer");
+        kafkaProps.put("value.serializer","org.apache.kafka.common.serialization.StringSerializer");
+        
+        
+        Producer<String,String> producer = new KafkaProducer<String,String>(kafkaProps);
+        System.out.println("Starting kafkaProducerFF......");
+        
+        File file= new File("/home/ubh01/Mayuresh_hadoop/ratings.csv");
+        try(Scanner scanner= new Scanner(file)){
+        	while (scanner.hasNextLine()) {
+        		String data = scanner.nextLine();
+//        		System.out.println(data);
+             
+//        		ProducerRecord<String,String> record = new ProducerRecord<String,String>(topicName,"Key: "+key,"Value: "+value);
+        		RecordMetadata meta = producer.send(new ProducerRecord<String, String>(topicName,data)).get();
+        		String strMetaData = "partition: " + meta.partition() +
+		  			     "; topic: " + meta.topic() + 
+		  			    "; offset: " + meta.offset() +
+		  			  "; hashCode: " + meta.hashCode() + 
+		  			 "; timestamp: " + meta.timestamp();
+			  System.out.println(strMetaData);
+			  System.out.println("sent message - " + data);
+        	}
+         }
+         catch (Exception e) {
+        	 e.printStackTrace();
+         }
+        producer.close();
+        System.out.println("-----done-----");
+	}
+}

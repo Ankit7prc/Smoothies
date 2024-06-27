@@ -1,0 +1,66 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, udf, desc, count, row_number
+from pyspark.sql.types import IntegerType, FloatType, StringType, StructType, StructField
+from pyspark.sql.window import Window
+
+# Initialize Spark session
+spark = SparkSession.builder \
+    .appName("MoviesAnalysis") \
+    .getOrCreate()
+
+# Define schema for movies.csv
+movies_schema = StructType([
+    StructField("movieId", IntegerType(), True),
+    StructField("title", StringType(), True),
+    StructField("genres", StringType(), True)
+])
+
+# Define schema for ratings.csv
+ratings_schema = StructType([
+    StructField("userId", IntegerType(), True),
+    StructField("movieId", IntegerType(), True),
+    StructField("rating", FloatType(), True),
+    StructField("timestamp", StringType(), True)
+])
+
+# Read the data with schema
+movies_df = spark.read.csv("/home/ubh01/176579_Rakesh/movies.csv", header=True, schema=movies_schema)
+ratings_df = spark.read.csv("/home/ubh01/176579_Rakesh/ratings.csv", header=True, schema=ratings_schema)
+
+# Define UDF to extract year from movie title
+import re
+
+def extract_year(title):
+    match = re.search(r"\((\d{4})\)", title)
+    return int(match.group(1)) if match else None
+
+extract_year_udf = udf(extract_year, IntegerType())
+
+# Add year column to movies_df
+movies_df = movies_df.withColumn("year", extract_year_udf(col("title")))
+
+# Filter movies released between 2003 and 2009
+movies_filtered_df = movies_df.filter((col("year") >= 2003) & (col("year") <= 2009))
+
+# Join movies and ratings data
+joined_df = movies_filtered_df.join(ratings_df, "movieId")
+
+# Aggregate data to get total ratings for each movie
+ratings_agg_df = joined_df.groupBy("year", "movieId", "title") \
+                          .agg(count("rating").alias("total_ratings"))
+
+# Define window specification
+window_spec = Window.partitionBy("year").orderBy(desc("total_ratings"))
+
+# Find the movie with the maximum number of ratings for each year
+top_rated_movies_df = ratings_agg_df.withColumn("rank", row_number().over(window_spec)) \
+                                    .filter(col("rank") == 1) \
+                                    .drop("rank") \
+                                    .orderBy("year")
+top_rated_movies_df.show()
+
+# Save the result as a single pipe-separated CSV file
+top_rated_movies_df.write.option("header", "true") \
+                        .option("delimiter", "|") \
+                        .mode("overwrite") \
+                        .csv("/home/ubh01/176579_Rakesh/top_rated_movies")
